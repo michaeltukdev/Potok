@@ -1,25 +1,35 @@
 package api
 
 import (
-	"fmt"
 	"log"
 	"net/http"
+
+	"github.com/gorilla/mux"
 )
 
 func StartServer() {
-	mux := http.NewServeMux()
+	r := mux.NewRouter()
 
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("Request received")
+	r.HandleFunc("/users/{user}/vaults", handleVaults)
 
-		http.Error(w, "Not Found", http.StatusNotFound)
-	})
+	r.HandleFunc("/users/{user}/vaults/{vault}", handlePostVault).Methods("POST")
+	r.HandleFunc("/users/{user}/vaults/{vault}", handleDeleteVault).Methods("DELETE")
 
-	srv := &http.Server{
-		Addr:    ":8080",
-		Handler: mux,
-	}
+	r.HandleFunc("/users/{user}/vaults/{vault}/upload", handleUploadVault).Methods("POST")
+	r.HandleFunc("/users/{user}/vaults/{vault}/download", handleDownloadVault).Methods("GET")
+
+	r.HandleFunc("/users/{user}/vaults/{vault}/files/{filepath:.*}", handleDownloadFile).Methods("GET")
+	r.HandleFunc("/users/{user}/vaults/{vault}/files/{filepath:.*}", handleUploadFile).Methods("POST")
+
+	http.ListenAndServe(":8080", r)
 
 	log.Println("Starting server on :8080")
-	log.Fatal(srv.ListenAndServe())
 }
+
+func handleVaults(w http.ResponseWriter, r *http.Request)        {}
+func handlePostVault(w http.ResponseWriter, r *http.Request)     {}
+func handleDeleteVault(w http.ResponseWriter, r *http.Request)   {}
+func handleUploadVault(w http.ResponseWriter, r *http.Request)   {}
+func handleDownloadVault(w http.ResponseWriter, r *http.Request) {}
+func handleDownloadFile(w http.ResponseWriter, r *http.Request)  {}
+func handleUploadFile(w http.ResponseWriter, r *http.Request)    {}
