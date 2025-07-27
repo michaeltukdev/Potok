@@ -24,6 +24,16 @@ func MakeAuthenticatedRequest(apiKey, url string) (*http.Response, error) {
 	return client.Do(req)
 }
 
+func MakeTestAuthenticatedRequest(apiKey, url string) (*http.Response, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", apiKey)
+	client := &http.Client{}
+	return client.Do(req)
+}
+
 func ReadVaultsFromResponse(resp *http.Response) ([]Vault, error) {
 	defer resp.Body.Close()
 	var vaults []Vault
