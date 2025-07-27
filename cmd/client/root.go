@@ -1,0 +1,27 @@
+package main
+
+import (
+	"os"
+
+	"github.com/spf13/cobra"
+)
+
+var rootCmd = &cobra.Command{
+	Use:   "potok",
+	Short: "Potok CLI for syncing Obsidian vaults",
+}
+
+func Execute() {
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+
+func init() {
+	rootCmd.AddCommand(syncCmd)
+	// rootCmd.AddCommand(uploadCmd)
+	// rootCmd.AddCommand(downloadCmd)
+	rootCmd.AddCommand(listVaultsCmd)
+	rootCmd.AddCommand(setApiUrlCmd)
+	rootCmd.AddCommand(setApiKeyCmd)
+}
