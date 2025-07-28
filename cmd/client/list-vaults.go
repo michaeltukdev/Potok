@@ -16,14 +16,9 @@ var listVaultsCmd = &cobra.Command{
 	Use:   "list-vaults",
 	Short: "List all of your synced vaults on the server",
 	Run: func(cmd *cobra.Command, args []string) {
-		cfg, err := config.Load()
+		cfg, err := config.MustLoadWithAPIURL()
 		if err != nil {
-			fmt.Println("Error loading config:", err)
-			return
-		}
-
-		if cfg.APIURL == "" {
-			fmt.Println("API URL is not set. Please run 'potok set-api-url' first.")
+			fmt.Println(err)
 			return
 		}
 

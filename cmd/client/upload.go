@@ -16,9 +16,9 @@ var uploadFileCmd = &cobra.Command{
 	Use:   "upload",
 	Short: "Upload a file into your vault",
 	Run: func(cmd *cobra.Command, args []string) {
-		cfg, err := config.Load()
+		cfg, err := config.MustLoadWithAPIURL()
 		if err != nil {
-			fmt.Println("Error loading config:", err)
+			fmt.Println(err)
 			return
 		}
 

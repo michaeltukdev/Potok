@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"strings"
 
 	"github.com/michaeltukdev/Potok/internal/client"
 	"github.com/michaeltukdev/Potok/internal/config"
+	"github.com/michaeltukdev/Potok/internal/prompt"
 	"github.com/spf13/cobra"
 	"github.com/zalando/go-keyring"
 )
@@ -19,29 +19,13 @@ var setApiKeyCmd = &cobra.Command{
 		service := "potok"
 		user := "api-key"
 
-		cfg, err := config.Load()
+		cfg, err := config.MustLoadWithAPIURL()
 		if err != nil {
-			fmt.Println("Error loading config:", err)
+			fmt.Println(err)
 			return
 		}
 
-		if cfg.APIURL == "" {
-			fmt.Println("API URL is not set. Please run 'potok set-api-url' first.")
-			return
-		}
-
-		fmt.Print("Please enter your API key: ")
-
-		var apiKey string
-		_, err = fmt.Scanln(&apiKey)
-		if err != nil {
-			log.Fatal("Failed to read input:", err)
-		}
-
-		apiKey = strings.TrimSpace(apiKey)
-		if apiKey == "" {
-			log.Fatal("API key cannot be empty.")
-		}
+		apiKey := prompt.Input("Enter your API key: ")
 
 		r, err := client.MakeAuthenticatedRequest(apiKey, cfg.APIURL+"/me")
 		if err != nil {
