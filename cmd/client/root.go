@@ -19,7 +19,7 @@ func Execute() {
 
 func init() {
 	rootCmd.AddCommand(syncCmd)
-	// rootCmd.AddCommand(uploadCmd)
+	rootCmd.AddCommand(uploadFileCmd)
 	// rootCmd.AddCommand(downloadCmd)
 	rootCmd.AddCommand(listVaultsCmd)
 	rootCmd.AddCommand(setApiUrlCmd)
