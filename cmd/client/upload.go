@@ -47,7 +47,6 @@ var uploadFileCmd = &cobra.Command{
 		req, err := http.NewRequest("POST", url, bytes.NewReader(encryptedBytes))
 		if err != nil {
 			panic(err)
-			return
 		}
 
 		fmt.Println(url)
@@ -63,7 +62,6 @@ var uploadFileCmd = &cobra.Command{
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			panic(err)
-			return
 		}
 		defer resp.Body.Close()
 
