@@ -1,6 +1,7 @@
 package database
 
 import (
+	"database/sql"
 	"errors"
 	"time"
 )
@@ -19,7 +20,7 @@ func FetchUserVaults(apiKey string) ([]Vault, error) {
 		return nil, errors.New("user not found")
 	}
 
-	rows, err := DB.Query("SELECT id, user_id, name, created_at, updated_at FROM vaults WHERE user_id = ?", user.id)
+	rows, err := DB.Query("SELECT id, user_id, name, created_at, updated_at FROM vaults WHERE user_id = ?", user.Id)
 	if err != nil {
 		return nil, err
 	}
@@ -43,4 +44,22 @@ func FetchUserVaults(apiKey string) ([]Vault, error) {
 	}
 
 	return vaults, nil
+}
+
+func FetchUserVaultByName(apiKey, vaultName string) (*Vault, error) {
+	user, err := FindByAPIKey(apiKey)
+	if err != nil {
+		return nil, errors.New("user not found")
+	}
+
+	var v Vault
+	err = DB.QueryRow("SELECT id, user_id, name, created_at, updated_at FROM vaults WHERE user_id = ? AND name = ?", user.Id, vaultName).Scan(&v.ID, &v.UserID, &v.Name, &v.CreatedAt, &v.UpdatedAt)
+
+	if err == sql.ErrNoRows {
+		return nil, errors.New("vault not found")
+	} else if err != nil {
+		return nil, err
+	}
+
+	return &v, nil
 }

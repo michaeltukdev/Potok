@@ -7,8 +7,9 @@ import (
 )
 
 type Config struct {
-	APIURL string `json:"api_url"`
-	APIKey string `json:"api_key,omitempty"`
+	APIURL   string `json:"api_url"`
+	APIKey   string `json:"api_key,omitempty"`
+	Username string `json:"username,omitempty"`
 }
 
 func configPath() (string, error) {

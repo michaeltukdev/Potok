@@ -33,9 +33,7 @@ var listVaultsCmd = &cobra.Command{
 			return
 		}
 
-		// TODO: Remove the /users/ and userID at some point
-		userID := 1
-		url := fmt.Sprintf("%s/users/%d/vaults", cfg.APIURL, userID)
+		url := fmt.Sprintf("%s/users/%s/vaults", cfg.APIURL, cfg.Username)
 
 		resp, err := client.MakeAuthenticatedRequest(secret, url)
 		if err != nil {
