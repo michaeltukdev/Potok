@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"os"
 
 	"github.com/michaeltukdev/Potok/internal/config"
+	"github.com/michaeltukdev/Potok/internal/crypto"
 	"github.com/spf13/cobra"
 	"github.com/zalando/go-keyring"
 )
@@ -38,7 +40,14 @@ var uploadFileCmd = &cobra.Command{
 		}
 		defer file.Close()
 
-		req, err := http.NewRequest("POST", url, file)
+		// TODO: Update password
+		encryptedBytes, err := crypto.EncryptFile("123", localFile)
+		if err != nil {
+			fmt.Println("Encryption error:", err)
+			return
+		}
+
+		req, err := http.NewRequest("POST", url, bytes.NewReader(encryptedBytes))
 		if err != nil {
 			panic(err)
 		}
