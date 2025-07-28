@@ -27,6 +27,8 @@ func StartServer() {
 	r.HandleFunc("/users/{user}/vaults/{vault}/files/{filepath:.*}", handleDownloadFile).Methods("GET")
 	r.HandleFunc("/users/{user}/vaults/{vault}/files/{filepath:.*}", handleUploadFile).Methods("POST").Handler(middleware.ApiMiddleware(http.HandlerFunc(handleUploadFile)))
 
+	r.HandleFunc("/me", handleMe).Methods("GET").Handler(middleware.ApiMiddleware(http.HandlerFunc(handleMe)))
+
 	http.ListenAndServe(":8080", r)
 
 	log.Println("Starting server on :8080")
@@ -96,4 +98,26 @@ func handleUploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
+}
+
+func handleMe(w http.ResponseWriter, r *http.Request) {
+	user, err := database.FindByAPIKey(r.Header.Get("Authorization"))
+	if err != nil {
+		http.Error(w, "Authentication failed!", http.StatusUnauthorized)
+		return
+	}
+
+	resp := struct {
+		Username string `json:"username"`
+		ID       int    `json:"id"`
+	}{
+		Username: user.Username,
+		ID:       user.Id,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -42,14 +43,30 @@ var setApiKeyCmd = &cobra.Command{
 			log.Fatal("API key cannot be empty.")
 		}
 
-		r, err := client.MakeAuthenticatedRequest(apiKey, cfg.APIURL+"/users/1/vaults")
+		r, err := client.MakeAuthenticatedRequest(apiKey, cfg.APIURL+"/me")
 		if err != nil {
 			log.Fatal(err)
 		}
+		defer r.Body.Close()
 
 		if r.StatusCode != 200 {
 			fmt.Println("Authentication Test Request Failed! Key not modified or saved. Please check your API url and make sure the server is running!")
 			return
+		}
+
+		// TODO: I really need to improve this but it works for now
+		var me struct {
+			Username string `json:"username"`
+			ID       int    `json:"id"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&me); err != nil {
+			log.Fatal("Failed to decode /me response:", err)
+		}
+
+		cfg.Username = me.Username
+		if err := config.Save(cfg); err != nil {
+			log.Fatal("Failed to save config:", err)
 		}
 
 		fmt.Println("Authentication Test Request Success!")
@@ -59,6 +76,6 @@ var setApiKeyCmd = &cobra.Command{
 			log.Fatal("Failed to save API key:", err)
 		}
 
-		fmt.Println("Successfully saved your API key!")
+		fmt.Printf("Successfully saved your API key and username (%s)!\n", me.Username)
 	},
 }
