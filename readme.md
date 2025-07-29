@@ -1,3 +1,6 @@
+> [!WARNING]
+> THIS IS STILL IN ACTIVE DEVELOPMENT. A LOT OF THE FUNCTIONALITY DOES NOT WORK.
+
 # Potok
 
 **Potok** is a secure, cross-platform, self-hosted CLI tool for automatically syncing and backing up [Obsidian](https://obsidian.md/) vaults (or technically anything) with end-to-end encryption. Potok is free, open-source, and designed for privacy and flexibility.
