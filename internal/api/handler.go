@@ -2,11 +2,14 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 
 	"github.com/gorilla/mux"
 	"github.com/michaeltukdev/Potok/internal/database"
@@ -22,10 +25,11 @@ func StartServer() {
 	r.HandleFunc("/users/{user}/vaults/{vault}", handlePostVault).Methods("POST")
 	r.HandleFunc("/users/{user}/vaults/{vault}", handleDeleteVault).Methods("DELETE")
 
-	r.HandleFunc("/users/{user}/vaults/{vault}/upload", handleUploadVault).Methods("POST")
-	r.HandleFunc("/users/{user}/vaults/{vault}/download", handleDownloadVault).Methods("GET")
+	// r.HandleFunc("/users/{user}/vaults/{vault}/upload", handleUploadVault).Methods("POST")
+	// r.HandleFunc("/users/{user}/vaults/{vault}/download", handleDownloadVault).Methods("GET")
 
-	r.HandleFunc("/users/{user}/vaults/{vault}/files/{filepath:.*}", handleDownloadFile).Methods("GET")
+	r.HandleFunc("/users/{user}/vaults/{vault}/files", handleListVaultFiles).Methods("GET").Handler(middleware.ApiMiddleware(http.HandlerFunc(handleListVaultFiles)))
+	r.HandleFunc("/users/{user}/vaults/{vault}/files/{filepath:.*}", handleDownloadFile).Methods("GET").Handler(middleware.ApiMiddleware(http.HandlerFunc(handleDownloadFile)))
 	r.HandleFunc("/users/{user}/vaults/{vault}/files/{filepath:.*}", handleUploadFile).Methods("POST").Handler(middleware.ApiMiddleware(http.HandlerFunc(handleUploadFile)))
 
 	r.HandleFunc("/me", handleMe).Methods("GET").Handler(middleware.ApiMiddleware(http.HandlerFunc(handleMe)))
@@ -85,10 +89,51 @@ func handlePostVault(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleDeleteVault(w http.ResponseWriter, r *http.Request)   {}
-func handleUploadVault(w http.ResponseWriter, r *http.Request)   {}
-func handleDownloadVault(w http.ResponseWriter, r *http.Request) {}
-func handleDownloadFile(w http.ResponseWriter, r *http.Request)  {}
+func handleDeleteVault(w http.ResponseWriter, r *http.Request) {}
+
+// func handleUploadVault(w http.ResponseWriter, r *http.Request)   {}
+// func handleDownloadVault(w http.ResponseWriter, r *http.Request) {}
+
+func handleDownloadFile(w http.ResponseWriter, r *http.Request) {
+	user, err := database.FindByAPIKey(r.Header.Get("Authorization"))
+	if err != nil {
+		http.Error(w, "Authentication failed!", http.StatusUnauthorized)
+		return
+	}
+
+	vars := mux.Vars(r)
+	urlUser := vars["user"]
+	vault := vars["vault"]
+	filepathInVault := vars["filepath"]
+
+	if urlUser != user.Username {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	_, err = database.FetchUserVaultByName(user.Api_key, vault)
+	if err != nil {
+		http.Error(w, "Vault not found or not owned by user", http.StatusNotFound)
+		return
+	}
+
+	baseDir := "../../data"
+	fullPath := path.Join(baseDir, user.Username, vault, filepathInVault)
+
+	f, err := os.Open(fullPath)
+	if err != nil {
+		http.Error(w, "File not found", http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.WriteHeader(http.StatusOK)
+	if _, err := io.Copy(w, f); err != nil {
+		http.Error(w, "Failed to send file", http.StatusInternalServerError)
+		return
+	}
+}
 
 func handleUploadFile(w http.ResponseWriter, r *http.Request) {
 	user, err := database.FindByAPIKey(r.Header.Get("Authorization"))
@@ -156,4 +201,54 @@ func handleMe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}
+}
+
+func handleListVaultFiles(w http.ResponseWriter, r *http.Request) {
+	user, err := database.FindByAPIKey(r.Header.Get("Authorization"))
+	if err != nil {
+		http.Error(w, "Authentication failed!", http.StatusUnauthorized)
+		return
+	}
+
+	vars := mux.Vars(r)
+	urlUser := vars["user"]
+	vault := vars["vault"]
+
+	if urlUser != user.Username {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	_, err = database.FetchUserVaultByName(user.Api_key, vault)
+	if err != nil {
+		http.Error(w, "Vault not found or not owned by user", http.StatusNotFound)
+		return
+	}
+
+	baseDir := "../../data"
+	vaultDir := path.Join(baseDir, user.Username, vault)
+
+	fmt.Println(vaultDir)
+
+	var files []string
+	filepath.WalkDir(vaultDir, func(path string, d fs.DirEntry, err error) error {
+		fmt.Println(1)
+
+		if err != nil {
+			return err
+		}
+
+		fmt.Println(1)
+
+		if !d.IsDir() {
+			rel, _ := filepath.Rel(vaultDir, path)
+			files = append(files, rel)
+		}
+		return nil
+	})
+
+	fmt.Println(files)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(files)
 }
