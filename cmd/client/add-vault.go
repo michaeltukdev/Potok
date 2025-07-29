@@ -2,61 +2,49 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"net/http"
+	"path/filepath"
 
 	"github.com/michaeltukdev/Potok/internal/client"
 	"github.com/michaeltukdev/Potok/internal/config"
+	"github.com/michaeltukdev/Potok/internal/crypto"
 	"github.com/michaeltukdev/Potok/internal/prompt"
+	"github.com/michaeltukdev/Potok/internal/storage"
 	"github.com/spf13/cobra"
 	"github.com/zalando/go-keyring"
 )
 
-// TODO: Probably move from this file
-func VaultNameExists(vaults []client.Vault, name string) bool {
-	for _, v := range vaults {
-		if v.Name == name {
-			return true
+func WalkVaultDir(vaultRoot string) ([]string, error) {
+	var files []string
+	err := filepath.WalkDir(vaultRoot, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
-	}
-	return false
-}
-
-// TODO: Probably move from this file
-func checkVault(api, username, vaultName string) (bool, error) {
-	secret, err := keyring.Get("potok", "api-key")
-	if err != nil {
-		return false, fmt.Errorf("error retrieving API key: %w", err)
-	}
-
-	url := fmt.Sprintf("%s/users/%s/vaults", api, username)
-	resp, err := client.MakeAuthenticatedRequest(secret, url)
-	if err != nil {
-		return false, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return false, fmt.Errorf("unauthenticated! Please set or update your API key")
-	}
-
-	vaults, err := client.ReadVaultsFromResponse(resp)
-	if err != nil {
-		return false, err
-	}
-
-	return VaultNameExists(vaults, vaultName), nil
+		if !d.IsDir() {
+			rel, err := filepath.Rel(vaultRoot, path)
+			if err != nil {
+				return err
+			}
+			files = append(files, rel)
+		}
+		return nil
+	})
+	return files, err
 }
 
 var addVaultCmd = &cobra.Command{
 	Use:   "add-vault",
 	Short: "Select a Vault to be backed up securely!",
 	Run: func(cmd *cobra.Command, args []string) {
+		// Ensure the API Url is set in config
 		cfg, err := config.MustLoadWithAPIURL()
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 
+		// Grab the api key from the OS keyring
 		secret, err := keyring.Get("potok", "api-key")
 		if err != nil {
 			fmt.Println("Error retrieving API key:", err)
@@ -67,10 +55,11 @@ var addVaultCmd = &cobra.Command{
 
 		vaultPath := prompt.Input("Path to your vault: ")
 
+		// Constant loop until we get a set vault name
 		var vaultName string
 		for {
 			vaultName = prompt.Input("Name your vault: ")
-			exists, err := checkVault(cfg.APIURL, cfg.Username, vaultName)
+			exists, err := client.CheckVault(cfg.APIURL, cfg.Username, vaultName)
 			if err != nil {
 				fmt.Println("Error checking vault:", err)
 				return
@@ -84,6 +73,7 @@ var addVaultCmd = &cobra.Command{
 
 		fmt.Printf("Vault Path: %s\nVault Name: %s\n", vaultPath, vaultName)
 
+		// Request to API to create the vault
 		url := fmt.Sprintf("%s/users/%s/vaults/%s", cfg.APIURL, cfg.Username, vaultName)
 		req, err := http.NewRequest("POST", url, nil)
 		if err != nil {
@@ -110,6 +100,7 @@ var addVaultCmd = &cobra.Command{
 
 		fmt.Println("Vault registered successfully!")
 
+		// Add vault to the config
 		vaultInfo := config.VaultInfo{
 			Name: vaultName,
 			Path: vaultPath,
@@ -122,5 +113,28 @@ var addVaultCmd = &cobra.Command{
 		}
 
 		fmt.Println("Vault info saved locally!")
+
+		// Encrypt and Upload
+		files, err := WalkVaultDir(vaultPath)
+		if err != nil {
+			fmt.Println("error")
+		}
+
+		for i, relPath := range files {
+			absPath := filepath.Join(vaultPath, relPath)
+			encrypted, err := crypto.EncryptFile("123", absPath)
+			if err != nil {
+				fmt.Printf("Failed to encrypt %s: %v\n", relPath, err)
+				continue
+			}
+
+			err = storage.UploadFile(cfg.APIURL, cfg.Username, vaultName, relPath, encrypted, secret)
+			if err != nil {
+				fmt.Printf("Failed to upload %s: %v\n", relPath, err)
+				continue
+			}
+
+			fmt.Printf("Uploaded %d/%d: %s\n", i+1, len(files), relPath)
+		}
 	},
 }
