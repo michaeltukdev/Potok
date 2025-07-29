@@ -6,10 +6,15 @@ import (
 	"path/filepath"
 )
 
+type VaultInfo struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+}
+
 type Config struct {
-	APIURL   string `json:"api_url"`
-	APIKey   string `json:"api_key,omitempty"`
-	Username string `json:"username,omitempty"`
+	APIURL   string      `json:"api_url"`
+	Username string      `json:"username,omitempty"`
+	Vaults   []VaultInfo `json:"vaults,omitempty"`
 }
 
 func configPath() (string, error) {
@@ -63,4 +68,15 @@ func Save(cfg *Config) error {
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")
 	return enc.Encode(cfg)
+}
+
+func (cfg *Config) AddVault(vault VaultInfo) {
+	for i, v := range cfg.Vaults {
+		if v.Name == vault.Name {
+			cfg.Vaults[i] = vault
+			return
+		}
+	}
+
+	cfg.Vaults = append(cfg.Vaults, vault)
 }

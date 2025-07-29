@@ -18,6 +18,7 @@ func StartServer() {
 
 	r.HandleFunc("/users/{user}/vaults", handleVaults).Handler(middleware.ApiMiddleware(http.HandlerFunc(handleVaults)))
 
+	// Creates a vault
 	r.HandleFunc("/users/{user}/vaults/{vault}", handlePostVault).Methods("POST")
 	r.HandleFunc("/users/{user}/vaults/{vault}", handleDeleteVault).Methods("DELETE")
 
@@ -48,7 +49,42 @@ func handleVaults(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handlePostVault(w http.ResponseWriter, r *http.Request)     {}
+func handlePostVault(w http.ResponseWriter, r *http.Request) {
+	user, err := database.FindByAPIKey(r.Header.Get("Authorization"))
+	if err != nil {
+		http.Error(w, "Authentication failed!", http.StatusUnauthorized)
+		return
+	}
+
+	vars := mux.Vars(r)
+	urlUser := vars["user"]
+	urlVault := vars["vault"]
+
+	if urlUser != user.Username {
+		http.Error(w, "Authentication failed!", http.StatusUnauthorized)
+		return
+	}
+
+	_, err = database.FetchUserVaultByName(user.Api_key, urlVault)
+	if err == nil {
+		http.Error(w, "Vault already exists", http.StatusConflict)
+		return
+	}
+
+	newVault, err := database.CreateVault(user.Id, urlVault)
+	if err != nil {
+		http.Error(w, "Failed to create vault", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	if err := json.NewEncoder(w).Encode(newVault); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+}
+
 func handleDeleteVault(w http.ResponseWriter, r *http.Request)   {}
 func handleUploadVault(w http.ResponseWriter, r *http.Request)   {}
 func handleDownloadVault(w http.ResponseWriter, r *http.Request) {}
