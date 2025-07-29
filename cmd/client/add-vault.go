@@ -71,6 +71,14 @@ var addVaultCmd = &cobra.Command{
 			}
 		}
 
+		vaultPassword := prompt.Input("Encryption password: ")
+
+		vaultKeyringUser := "vault-" + vaultName
+		if err := keyring.Set("potok", vaultKeyringUser, vaultPassword); err != nil {
+			fmt.Println("Failed to save vault password in keyring:", err)
+			return
+		}
+
 		fmt.Printf("Vault Path: %s\nVault Name: %s\n", vaultPath, vaultName)
 
 		// Request to API to create the vault
@@ -122,7 +130,7 @@ var addVaultCmd = &cobra.Command{
 
 		for i, relPath := range files {
 			absPath := filepath.Join(vaultPath, relPath)
-			encrypted, err := crypto.EncryptFile("123", absPath)
+			encrypted, err := crypto.EncryptFile(vaultPassword, absPath)
 			if err != nil {
 				fmt.Printf("Failed to encrypt %s: %v\n", relPath, err)
 				continue
