@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -62,4 +63,28 @@ func FetchUserVaultByName(apiKey, vaultName string) (*Vault, error) {
 	}
 
 	return &v, nil
+}
+
+func CreateVault(userID int, vaultName string) (*Vault, error) {
+	now := time.Now().UTC()
+	res, err := DB.Exec(
+		`INSERT INTO vaults (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?)`,
+		userID, vaultName, now, now,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to insert vault: %w", err)
+	}
+
+	id, err := res.LastInsertId()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get last insert id: %w", err)
+	}
+
+	return &Vault{
+		ID:        int(id),
+		UserID:    userID,
+		Name:      vaultName,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}, nil
 }

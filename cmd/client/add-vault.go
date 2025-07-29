@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/michaeltukdev/Potok/internal/client"
 	"github.com/michaeltukdev/Potok/internal/config"
@@ -56,6 +57,12 @@ var addVaultCmd = &cobra.Command{
 			return
 		}
 
+		secret, err := keyring.Get("potok", "api-key")
+		if err != nil {
+			fmt.Println("Error retrieving API key:", err)
+			return
+		}
+
 		fmt.Println("Adding Vault...")
 
 		vaultPath := prompt.Input("Path to your vault: ")
@@ -75,8 +82,45 @@ var addVaultCmd = &cobra.Command{
 			}
 		}
 
-		// vaultPassword := prompt.Input("Encryption password: ")
-
 		fmt.Printf("Vault Path: %s\nVault Name: %s\n", vaultPath, vaultName)
+
+		url := fmt.Sprintf("%s/users/%s/vaults/%s", cfg.APIURL, cfg.Username, vaultName)
+		req, err := http.NewRequest("POST", url, nil)
+		if err != nil {
+			fmt.Println("Failed to create request:", err)
+			return
+		}
+		req.Header.Set("Authorization", secret)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			fmt.Println("Failed to register vault:", err)
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusConflict {
+			fmt.Printf("A vault named '%s' already exists. Please choose a different name.\n", vaultName)
+			return
+		}
+		if resp.StatusCode != http.StatusCreated {
+			fmt.Printf("Failed to register vault! Server returned: %s\n", resp.Status)
+			return
+		}
+
+		fmt.Println("Vault registered successfully!")
+
+		vaultInfo := config.VaultInfo{
+			Name: vaultName,
+			Path: vaultPath,
+		}
+
+		cfg.AddVault(vaultInfo)
+		if err := config.Save(cfg); err != nil {
+			fmt.Println("Failed to save vault info locally:", err)
+			return
+		}
+
+		fmt.Println("Vault info saved locally!")
 	},
 }
