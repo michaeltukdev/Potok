@@ -19,44 +19,49 @@ import (
 func StartServer() {
 	r := mux.NewRouter()
 
-	r.HandleFunc("/users/{user}/vaults", handleVaults).Handler(middleware.ApiMiddleware(http.HandlerFunc(handleVaults)))
+	api := r.PathPrefix("/").Subrouter()
+	api.Use(middleware.ApiMiddleware)
 
-	// Creates a vault
-	r.HandleFunc("/users/{user}/vaults/{vault}", handlePostVault).Methods("POST")
-	r.HandleFunc("/users/{user}/vaults/{vault}", handleDeleteVault).Methods("DELETE")
+	// Vaults
+	api.HandleFunc("/users/{user}/vaults", handleVaults)
+	api.HandleFunc("/users/{user}/vaults/{vault}", handlePostVault).Methods("POST")
+	// api.HandleFunc("/users/{user}/vaults/{vault}", handleDeleteVault).Methods("DELETE")
 
-	// r.HandleFunc("/users/{user}/vaults/{vault}/upload", handleUploadVault).Methods("POST")
-	// r.HandleFunc("/users/{user}/vaults/{vault}/download", handleDownloadVault).Methods("GET")
+	// Files
+	api.HandleFunc("/users/{user}/vaults/{vault}/files", handleListVaultFiles).Methods("GET")
+	api.HandleFunc("/users/{user}/vaults/{vault}/files/{filepath:.*}", handleDownloadFile).Methods("GET")
+	api.HandleFunc("/users/{user}/vaults/{vault}/files/{filepath:.*}", handleUploadFile).Methods("POST")
 
-	r.HandleFunc("/users/{user}/vaults/{vault}/files", handleListVaultFiles).Methods("GET").Handler(middleware.ApiMiddleware(http.HandlerFunc(handleListVaultFiles)))
-	r.HandleFunc("/users/{user}/vaults/{vault}/files/{filepath:.*}", handleDownloadFile).Methods("GET").Handler(middleware.ApiMiddleware(http.HandlerFunc(handleDownloadFile)))
-	r.HandleFunc("/users/{user}/vaults/{vault}/files/{filepath:.*}", handleUploadFile).Methods("POST").Handler(middleware.ApiMiddleware(http.HandlerFunc(handleUploadFile)))
-
-	r.HandleFunc("/me", handleMe).Methods("GET").Handler(middleware.ApiMiddleware(http.HandlerFunc(handleMe)))
-
-	http.ListenAndServe(":8080", r)
+	// Authenticated user info
+	api.HandleFunc("/me", handleMe).Methods("GET")
 
 	log.Println("Starting server on :8080")
+	http.ListenAndServe(":8080", r)
 }
 
+// handleVaults returns all vaults for the authenticated user.
 func handleVaults(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
 	vaults, err := database.FetchUserVaults(r.Header.Get("Authorization"))
 	if err != nil {
-		http.Error(w, "Error fetching vaults", http.StatusInternalServerError)
+		http.Error(w, "Unauthorized or error fetching vaults", http.StatusUnauthorized)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(vaults); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}
 }
 
+// handlePostVaults creates a vault with the data passed in by the user.
 func handlePostVault(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
 	user, err := database.FindByAPIKey(r.Header.Get("Authorization"))
 	if err != nil {
-		http.Error(w, "Authentication failed!", http.StatusUnauthorized)
+		http.Error(w, "Unauthorized: invalid API key", http.StatusUnauthorized)
 		return
 	}
 
@@ -65,12 +70,11 @@ func handlePostVault(w http.ResponseWriter, r *http.Request) {
 	urlVault := vars["vault"]
 
 	if urlUser != user.Username {
-		http.Error(w, "Authentication failed!", http.StatusUnauthorized)
+		http.Error(w, "Unauthorized: user mismatch", http.StatusUnauthorized)
 		return
 	}
 
-	_, err = database.FetchUserVaultByName(user.Api_key, urlVault)
-	if err == nil {
+	if _, err := database.FetchUserVaultByName(user.Api_key, urlVault); err == nil {
 		http.Error(w, "Vault already exists", http.StatusConflict)
 		return
 	}
@@ -81,7 +85,6 @@ func handlePostVault(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(newVault); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
@@ -89,15 +92,56 @@ func handlePostVault(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleDeleteVault(w http.ResponseWriter, r *http.Request) {}
-
+// func handleDeleteVault(w http.ResponseWriter, r *http.Request) {}
 // func handleUploadVault(w http.ResponseWriter, r *http.Request)   {}
 // func handleDownloadVault(w http.ResponseWriter, r *http.Request) {}
 
+// handleDownloadFile takes in data from the client, and returns a specific file from the vault.
 func handleDownloadFile(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/octet-stream")
+
 	user, err := database.FindByAPIKey(r.Header.Get("Authorization"))
 	if err != nil {
-		http.Error(w, "Authentication failed!", http.StatusUnauthorized)
+		http.Error(w, "Unauthorized: invalid API key", http.StatusUnauthorized)
+		return
+	}
+
+	vars := mux.Vars(r)
+	urlUser := vars["user"]
+	urlVault := vars["vault"]
+	filepathInVault := vars["filepath"]
+
+	if urlUser != user.Username {
+		http.Error(w, "Unauthorized: user mismatch", http.StatusUnauthorized)
+		return
+	}
+
+	if _, err := database.FetchUserVaultByName(user.Api_key, urlVault); err == nil {
+		http.Error(w, "Vault already exists", http.StatusConflict)
+		return
+	}
+
+	fullPath := path.Join("../../data", user.Username, urlVault, filepathInVault)
+
+	f, err := os.Open(fullPath)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("File not found: %s", fullPath), http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+
+	w.WriteHeader(http.StatusOK)
+	if _, err := io.Copy(w, f); err != nil {
+		http.Error(w, "Failed to send file", http.StatusInternalServerError)
+		return
+	}
+}
+
+// handleUploadFile handles uploading a file to a specific vault for the authenticated user.
+func handleUploadFile(w http.ResponseWriter, r *http.Request) {
+	user, err := database.FindByAPIKey(r.Header.Get("Authorization"))
+	if err != nil {
+		http.Error(w, "Unauthorized: invalid API key", http.StatusUnauthorized)
 		return
 	}
 
@@ -107,60 +151,17 @@ func handleDownloadFile(w http.ResponseWriter, r *http.Request) {
 	filepathInVault := vars["filepath"]
 
 	if urlUser != user.Username {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
-
-	_, err = database.FetchUserVaultByName(user.Api_key, vault)
-	if err != nil {
-		http.Error(w, "Vault not found or not owned by user", http.StatusNotFound)
-		return
-	}
-
-	baseDir := "../../data"
-	fullPath := path.Join(baseDir, user.Username, vault, filepathInVault)
-
-	f, err := os.Open(fullPath)
-	if err != nil {
-		http.Error(w, "File not found", http.StatusNotFound)
-		return
-	}
-	defer f.Close()
-
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.WriteHeader(http.StatusOK)
-	if _, err := io.Copy(w, f); err != nil {
-		http.Error(w, "Failed to send file", http.StatusInternalServerError)
-		return
-	}
-}
-
-func handleUploadFile(w http.ResponseWriter, r *http.Request) {
-	user, err := database.FindByAPIKey(r.Header.Get("Authorization"))
-	if err != nil {
-		http.Error(w, "Authentication failed!", http.StatusUnauthorized)
-		return
-	}
-
-	vars := mux.Vars(r)
-	urlUser := vars["user"]
-	vault := vars["vault"]
-	filepathInVault := vars["filepath"]
-
-	// TODO: See how this will work on the client (thinking of just removing this)
-	if user.Username != urlUser {
-		http.Error(w, "Authentication failed!", http.StatusUnauthorized)
+		http.Error(w, "Unauthorized: user mismatch", http.StatusUnauthorized)
 		return
 	}
 
 	fetchedVault, err := database.FetchUserVaultByName(user.Api_key, vault)
 	if err != nil {
-		http.Error(w, "Unauthorized Access!", http.StatusUnauthorized)
+		http.Error(w, "Vault not found or unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	baseDir := "../../data"
-	fullPath := path.Join(baseDir, user.Username, fetchedVault.Name, filepathInVault)
+	fullPath := path.Join("../../data", user.Username, fetchedVault.Name, filepathInVault)
 
 	if err := os.MkdirAll(path.Dir(fullPath), 0700); err != nil {
 		http.Error(w, "Failed to create directories", http.StatusInternalServerError)
@@ -181,10 +182,13 @@ func handleUploadFile(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 }
 
+// handleMe returns information about the authenticated user.
 func handleMe(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
 	user, err := database.FindByAPIKey(r.Header.Get("Authorization"))
 	if err != nil {
-		http.Error(w, "Authentication failed!", http.StatusUnauthorized)
+		http.Error(w, "Unauthorized: invalid API key", http.StatusUnauthorized)
 		return
 	}
 
@@ -196,49 +200,43 @@ func handleMe(w http.ResponseWriter, r *http.Request) {
 		ID:       user.Id,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}
 }
 
+// handleListVaultFiles returns a JSON array of all file paths in the specified vault for the authenticated user.
 func handleListVaultFiles(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
 	user, err := database.FindByAPIKey(r.Header.Get("Authorization"))
 	if err != nil {
-		http.Error(w, "Authentication failed!", http.StatusUnauthorized)
+		http.Error(w, "Unauthorized: invalid API key", http.StatusUnauthorized)
 		return
 	}
 
 	vars := mux.Vars(r)
 	urlUser := vars["user"]
-	vault := vars["vault"]
+	urlVault := vars["vault"]
 
 	if urlUser != user.Username {
-		http.Error(w, "Forbidden", http.StatusForbidden)
+		http.Error(w, "Unauthorized: user mismatch", http.StatusUnauthorized)
 		return
 	}
 
-	_, err = database.FetchUserVaultByName(user.Api_key, vault)
-	if err != nil {
-		http.Error(w, "Vault not found or not owned by user", http.StatusNotFound)
+	if _, err := database.FetchUserVaultByName(user.Api_key, urlVault); err == nil {
+		http.Error(w, "Vault already exists", http.StatusConflict)
 		return
 	}
 
-	baseDir := "../../data"
-	vaultDir := path.Join(baseDir, user.Username, vault)
-
-	fmt.Println(vaultDir)
+	vaultDir := path.Join("../../data", user.Username, urlVault)
 
 	var files []string
 	filepath.WalkDir(vaultDir, func(path string, d fs.DirEntry, err error) error {
-		fmt.Println(1)
-
 		if err != nil {
 			return err
 		}
-
-		fmt.Println(1)
 
 		if !d.IsDir() {
 			rel, _ := filepath.Rel(vaultDir, path)
@@ -247,8 +245,5 @@ func handleListVaultFiles(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 
-	fmt.Println(files)
-
-	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(files)
 }
