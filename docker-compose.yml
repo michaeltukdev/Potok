@@ -1,0 +1,16 @@
+services:
+  app:
+    build: .
+    container_name: potok-server
+    ports:
+      - "8081:8080"
+    volumes:
+      - potok-database:/app/database
+      - potok-vault:/app/vault
+    environment:
+      - PORT=8080
+      - DATABASE_PATH=/app/database/potok.db
+
+volumes:
+  potok-database:
+  potok-vault:
