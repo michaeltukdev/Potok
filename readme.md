@@ -90,3 +90,16 @@ Contributions are welcome! Please open issues or pull requests.
 - [spf13/cobra](https://github.com/spf13/cobra)
 - [zalando/go-keyring](https://github.com/zalando/go-keyring)
 - [fsnotify](https://github.com/fsnotify/fsnotify)
+
+
+
+## Running with Docker
+You can run the Potok server and its database with a single command using Docker.
+
+Make sure you have Docker and Docker Compose installed.
+
+From the root of the project, run the following command:
+
+<b>docker compose up --build</b>
+
+The server will be available at http://localhost:8080.

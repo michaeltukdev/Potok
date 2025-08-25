@@ -16,7 +16,7 @@ import (
 	"github.com/michaeltukdev/Potok/internal/middleware"
 )
 
-func StartServer() {
+func StartServer(port string) { // <-- 1. Accept the port as an argument
 	r := mux.NewRouter()
 
 	api := r.PathPrefix("/").Subrouter()
@@ -35,8 +35,8 @@ func StartServer() {
 	// Authenticated user info
 	api.HandleFunc("/me", handleMe).Methods("GET")
 
-	log.Println("Starting server on :8080")
-	http.ListenAndServe(":8080", r)
+	log.Println("Starting server on :" + port) // <-- 2. Use the port variable in the log
+	http.ListenAndServe(":" + port, r)       // <-- 3. Use the port variable to start the server
 }
 
 // handleVaults returns all vaults for the authenticated user.
